@@ -1,0 +1,169 @@
+---
+title: "MonarchExplore"
+author: "Jerad Acosta"
+date: "March 6, 2015"
+output: html_document
+---
+
+Libraries
+```{r, libraries, message=FALSE, warning=FALSE}
+library(ggplot2)
+require(caret)
+require(dplyr)
+require(reshape2)
+```
+
+**Import Data**
+```{r}
+# Set working Directory
+wd <- "/Users/irJERAD/1DataContest/Monarch"
+setwd(wd)
+
+# load data into R for Manipulation
+filePath <- "/Users/irJERAD/1DataContest/Monarch/MonarchPunishmentsEditCSV.csv"
+data <- read.csv(filePath)
+
+# Create Directory for data as we munge
+if(!file.exists("./RData")){dir.create("./RData")}
+```
+
+**Summarize Data**
+```{r, summarize}
+str(data)
+```
+
+** FOR TEMP REFERENCE, REMOVE WHEN DONE**
+'data.frame':        984 obs. of  18 variables:   
+ $ id                                  : int  1 2 3 4 5 6 7 8 9 10 ...   
+ $ timestamp                           : Factor w/ 61 levels "","00:00.0","01:00.0",..: 58 4 54 46 29 40 61 18 38 31 ...   
+ $ student_id                          : int  9 80 80 80 80 80 80 80 80 80 ...   
+ $ grade                               : int  2 4 4 4 4 4 4 4 4 4 ...   
+ $ date_and_time_of_misbehavior        : Factor w/ 608 levels "","00:00.0","01:00.0",..: 129 262 223 425 366 373 458 472 481 491 ...   
+ $ location_of_misbehavior             : Factor w/ 131 levels "","12th and Imperial",..: 26 93 93 10 123 97 10 10 10 10 ...   
+ $ documenting_staff_id                : int  1 2 2 2 2 2 2 2 2 2 ...   
+ $ documenting_staff                   : Factor w/ 13 levels "","Mr. Abdi",..: 2 4 4 4 4 4 4 4 4 4 ...   
+ $ classroom_or_administrative_managed : Factor w/ 3 levels "","Administrative",..: 2 2 2 2 2 2 2 2 2 2 ...   
+ $ type_of_misbehavior                 : Factor w/ 249 levels "","Attendance (CM), Verbal/Physical Intimidation (D12)",..: 32 192 119 89 103 152 90 241 119 89 ...   
+ $ narrative_description_of_misbehavior: Factor w/ 851 levels "","\"Borrowed\" another students phone and showed a personal video. The other student got very upset  and it created a scene in th"| __truncated__,..: 743 525 618 712 780 533 154 589 98 72 ...   
+ $ reporting_staff_id                  : int  157 45 7 26 91 32 112 112 112 112 ...   
+ $ reporting_staff                     : Factor w/ 67 levels "","FIT","Front Desk",..: 58 10 5 7 38 11 52 52 52 52 ...   
+ $ d12_planning_completed              : Factor w/ 7 levels "","A, B, C","A, B, C, D",..: 3 3 3 3 3 3 3 3 3 3 ...   
+ $ narrative_of_consequence            : Factor w/ 453 levels "","1/2 day in d12",..: 395 1 38 1 1 1 1 1 1 1 ...   
+ $ consequence                         : Factor w/ 89 levels "","After School Detention",..: 14 56 56 56 56 56 56 56 56 56 ...   
+ $ Consequences_transcribed            : Factor w/ 65 levels "","C","C, LD",..: 11 43 43 43 43 43 43 43 43 43 ...   
+ $ misbehavior_transcribed             : Factor w/ 170 levels "","C","C , MI , NC , DS , I",..: 24 149 86 59 75 109 60 20 86 59 ...   
+
+* 61 levels of timestamps and only 60 hours in a day.   
+        + Find and remove factor level ""   
+* Grade level is an int variable   
+        + cast as factor   
+
+```{r, reduce empty factors}
+# find and remove empty factor level
+r <- which(data$timestamp == "")
+data[r,]
+```
+row `r r` is an empty row.   
+Remove it from the dataset
+
+```{r, remove empty row}
+data <- data[-c(r),]
+```
+
+### Explore density of distribution amongst students
+```{r, explore dist, fig.width = 8}
+# Number of events per student table
+eventTable <- table(data$student_id)
+# Create a histogram counting number of behavioral events per student
+plot(eventTable[order(-eventTable)], type = 'h', xlab = "Student ID", ylab = " Number of Offenses")
+
+quantile(eventTable)
+# percentage with 4 or fewer offenses
+fourPcnt <- (sum(eventTable <= 4) / length(eventTable)) * 100
+fourPcnt
+```
+
+Here we see the majority of behavioral offenders are have 2 or fewer offenses.   
+`r round(fourPcnt, 2)`% of reported offenders have 4 or fewer.   
+As it turns out, `r sum(eventTable >= 6)` of the `r length(eventTable)` students account for over 50% of the offenses recorded.   
+In other words `r round((sum(eventTable >= 6) / length(eventTable)) * 100,  2)`% of the offending students are responsibly for `r round((sum(head(eventTable[order(-eventTable)], n = 48)) / sum(eventTable)) * 100, 2)`% of the offenses.
+
+Using this distribution data we can examine 2 population of offenders to search for clues about what separates or lays at the center of these populations.
+
+### Looking at 2 populations of Offenders
+```{r}
+sum(eventTable <= 3) / length(eventTable)
+# number of Students with over 10 offenses
+sum(eventTable > 10) 
+```
+The Population of students who have 3 or fewer offenses and make up `r round((sum(eventTable <= 3) / length(eventTable)) * 100, 2)`% of the offending students
+
+The population of students with more than 10 offenses makes up for over one-third of all the offenses recorded.   
+To be precise they make up `r round(sum(head(eventTable[order(-eventTable)], n = sum(eventTable > 10))) / sum(eventTable) * 100, 2)`% of the behavioral offenses.   
+
+```{r}
+round(sum(head(eventTable[order(-eventTable)], n = sum(eventTable > 6))) / sum(eventTable) * 100 ,2)
+```
+Students with more than 6 offences make up apx 52.29% of the population of offenses.
+
+```{r, statistically symetric plot, fig.width=9}
+fake_data <- abs(rnorm(50, mean = 3.6, sd =  4.7))
+fake_indx <- c(1:50)
+fake_frame <- data.frame(fake_indx, fake_data)
+fake_plot <- ggplot(fake_frame, aes(fake_indx, fake_data, fill = (fake_data < 3.6)))
+fake_plot + geom_bar(stat = "identity") + geom_smooth()
+plot(fake_frame, type = "h")
+```
+
+**Index Populations**
+```{r, index Populations, fig.width=8, fig.height=6}
+# Index of Student with more than 10 offenses
+overTenIndx <- names(eventTable[eventTable > 10])
+tenData <- filter(data, student_id %in% overTenIndx)
+
+overSixIndx <- names(eventTable[eventTable > 6])
+sixData <- filter(data, student_id %in% overSixIndx)
+
+# Index of Students with 3 or less offenses
+threeLessIndx <- names(eventTable[eventTable <= 3])
+threeData <- filter(data, student_id %in% threeLessIndx)
+
+# review plot with line at 6 or more offences
+plot(eventTable[order(-eventTable)], type = 'h', xlab = "Student ID", ylab = " Number of Offenses")
+# add line differentiation population with more than 6 offenses
+abline(v = length(eventTable) - sum(eventTable <= 3), 
+       col = "green", lwd = 3, 
+       text(170,20, labels = "Students With 3 or Fewer \n Behavioral Offenses",
+            col = "Dark Green", cex = 2))
+# add line differentiating population with 3 or less offenses
+abline(v = sum(eventTable > 6), 
+       col = "red", lwd = 3, 
+       text(22,23, labels = "Students With More than\n 6 Behavioral Offenses",
+            col = "Dark red", srt = 90, cex = 1.1))
+
+# Create Data frame from organized table
+table_frame <- as.data.frame(eventTable[order(-eventTable)])
+```
+
+
+### Transcibing Variables
+We want to make information in our data easier for exploration and statistical analysis. To do so, we will create some factor variables and condense certain variable observations from things like "4th grade class" and "3rd grade Classroom" to just "Class" or "Classroom".   
+This makes sense because from the student's perspective both of these nominal categories would be associated with the environment of a classroom.
+
+```{r}
+# Create environment factor variable
+# Search for word class to create a classroom level in the environmental factors
+# Note for personal learning: Which ever factor level is assigned first is the one that stays
+# Just like an If / Else statement - Priority goes to first statement
+data$environment <- ifelse(grepl("class", data$location_of_misbehavior, ignore.case = TRUE), "Classroom",
+                           ifelse(grepl("PE", data$location_of_misbehavior, ignore.case = TRUE), "PE", 
+                                  ifelse(grepl("lunch", data$location_of_misbehavior, ignore.case = TRUE), "Lunch",
+                                         ifelse(grepl("yoga", data$location_of_misbehavior, ignore.case = TRUE), "Yoga",
+                                                ifelse(grepl("gym", data$location_of_misbehavior, ignore.case = TRUE), "Gym", 
+                                                       ifelse(grepl("blacktop", data$location_of_misbehavior, ignore.case = TRUE), "Blacktop",
+                                                              ifelse(grepl("cafeteria", data$location_of_misbehavior, ignore.case = TRUE), "Cafeteria",
+                                                                     ifelse(grepl("hallway", data$location_of_misbehavior, ignore.case = TRUE), "Hallway",
+                                                                            ifelse(grepl("playground", data$location_of_misbehavior, ignore.case = TRUE), "Playground",
+                                                                                   ifelse(grepl("snack", data$location_of_misbehavior, ignore.case = TRUE), "Snack Time", data$location_of_misbehavior))))))))))
+
+```

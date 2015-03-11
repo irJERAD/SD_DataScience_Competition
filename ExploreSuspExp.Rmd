@@ -1,0 +1,146 @@
+---
+title: "DataCompPractice"
+author: "Jerad Acosta"
+date: "March 6, 2015"
+output: pdf_document
+---
+
+### Load Data
+```{r}
+data <- read.table("/Users/irJERAD/1DataContest/ExpulsionSuspensionData/2013-14SuspExpData.txt", sep="\t", header = T, fill = T)
+# Use fill = T because starting at line 5016 missing values have an asterisk "*"
+```
+
+**Variable Names**
+> names(d)
+ [1] "AggegateLevel"         "Cds"                   "Name"                  "DisciplineType"       
+ [5] "Ethnicity"             "Weapons"               "Drugs"                 "ViolenceWithInjury"   
+ [9] "ViolenceWithoutInjury" "OtherNonDefiance"      "OtherDefiance"         "Total"                
+[13] "Year"                  "DateCreated"           "DateUpdated"  
+
+### Dimensions (pre Tidy)
+Data set has 15 variables and 72310 Observations
+```{r}
+dim(data)
+# [1] 72310    15
+sum(as.integer(data$Drugs))
+# [1] 604509
+# OR sum(as.integer(data$[[7]]))
+```
+#### All Sums
+[[6]] Weapons = 324726   
+[[7]] Drugs = 604509   
+[[8]] ViolenceWithoutInjury = 611473   
+[[9]] ViolenceWithInjury = 2124247   
+[[10]] OtherNonDefiance = 598305   
+[[11]] OtherDefiance = 2107312   
+[[12]] Total = 4950594   
+
+**There is Some Overlap**   
+bc 324726 + 604509 + 611473 + 2124247 + 598305 + 2107312 = 6370572   
+but total is 4950594
+
+**Need to create Tidy data set**
+
+### Creating a Tidy data subset for analysis
+#### By School
+```{r}
+library(dplyr) # to subset observations and Variables
+schoolTotals <- filter(data, AggegateLevel == 'T') # Data.frame of school totals
+# 27 observations >> so we must have 27 unique schools
+# To Check:
+```
+
+```{r, eval=FALSE}
+schoolTotals == distinct(schoolTotals)
+ [1] TRUE
+```
+
+```{r}
+# coerse classes to appropriate for visualization and grammar of graphics
+for (i in 6:12) {
+        # Convert Weapons, Drugs, ViolenceWithInjury, ViolenceWithoutInjury
+        # OtherNonDefiance OtherDefiance and Total as integers for graphics
+        schoolTotals[[i]] <- as.integer(schoolTotals[[i]])
+}
+# cast Ethnicity as factor for aesthetic differentiation
+schoolTotals$Ethnicity <- as.factor(schoolTotals$Ethnicity)
+
+# create data directory
+if(!file.exists("RData")) {
+    dir.create("RData")
+}
+# write new data into data file
+write.table(schoolTotals, file = "./RData/schoolTotalSuspExp")
+```
+
+### Ideas
+* Explore unfair punishment (based on ethnicity)
+        + DisciplineType across different Ethnicity
+        + keep Offense Category constant (Drugs, Weapons, etc)
+        + Use Residency in San Diego School by Race/Ethnicity
+http://s3.sandiegodata.org.s3.amazonaws.com/share/data_contest_2015/education/sandi.net/Residency%20by%20Ethnicity%201415%20Flat.xlsx
+```{r, qplot}
+library(ggplot2)
+qplot(DisciplineType, Drugs, data = schoolTotals, color = as.factor(Ethnicity))
+# Ethnicity is an integer, need to cast as factor
+```
+
+#### rCharts D3 JavaScript Library
+```{r, rCharts1, results='asis', comment=NA, tidy=FALSE}
+library(devtools)
+library(rCharts)
+# Create Stacked and grouped interactive Bar Charts
+n1 <- nPlot(Weapons ~ DisciplineType, group = "Ethnicity", data = schoolTotals, type = "multiBarChart", cdn = TRUE)
+n1$show('inline', include_asset = TRUE)
+```
+
+```{r, rCharts2, results='asis', comment=NA, tidy=FALSE}
+# Lined Dot
+x1 <- xPlot(ViolenceWithoutInjury ~ DisciplineType, group = "Ethnicity", data = schoolTotals, type = "line-dotted", cdn = TRUE)
+x1$show('inline', include_assets = TRUE)
+```
+Notice the drop in "In-School Suspensions" for specific Ethnic Groups stand out vividly when disciplining for violent actions that did not result in any injury.   
+One could suspect such disciplinary concequences are very subjective and left to the disciplinarians discretion, which in this case appears to have a strong correlation to student ethnicity.
+```{r, rCharts3, results='asis', comment=NA, tidy=FALSE}
+# Total Disciplinary Action (Each a different color) Vs Ethnicity
+n1 <- nPlot(Total ~ Ethnicity, group = "DisciplineType", data = schoolTotals, type = "multiBarChart", cdn = TRUE)
+n1$show('inline', include_assets = TRUE)
+```
+
+In the last plot we are looking at the total of each disciplinary action against each Ethnic group.   
+**Dark Blue** Represents Expulsion   
+**Light Blue** Represents In-School Suspension   
+**Orange** Represents Out-of-School Suspension   
+**Number to Ethnicity** transcription   
+
+0=Not Reported   
+1=American Indian or Alaskan Native, not Hispanic   
+2=Asian, not Hispanic   
+3=Pacific Islander, not Hispanic 4=Filipino, not Hispanic 5=Hispanic or Latino   
+6=African American, not Hispanic 7=White, not Hispanic   
+9=Two or more races, not Hispanic   
+
+Ideally we would like to see students spending as much time in school as possible.
+Some of the benefits to keeping students in school:
+* Education
+        + Personal Enrichment and development
+        + Social Skills
+        + Academic Skills
+* Economic
+        + Allowing Parents to work
+        + Saving money on child care for parents
+        + Investing in Students economic future via education
+        
+Thus, due to the importance of keeping students in school we would want to see Expulsion as a last resort for discipline.
+Using similar logic, we can conclude that In-School Suspensions should be considered a better alternative to Out-Of-School Suspensions whenever possible.
+
+Unfortunately the data does not follow this pattern of thought.   
+
+Additionally we can see a great disproportion between disciplinary actions given to students of different ethnicities.
+Minorities such as American Indian's are given over 5 times more out of school suspensions than in-school suspensions in total.
+The minority groups of Pacific Islander and Filipino as well as the Hispanic or Latino groups each have more than one-third of their disciplinary actions resulting in complete expulsion from school.   
+**TODO** 
+* Show these groups are also financially disadvantaged and draw a link to the wealth of a group of students and the disciplinary actions they receive.
+* Check census data to confirm the number of students receiving these disciplinary actions is much greater than the proportion of them enrolled in the schools.
+        + could also check STAR test data for student ethnicity enrollment rates.
